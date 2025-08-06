@@ -40,8 +40,8 @@ export default function FallDetectionApp() {
   const [error, setError] = useState<string>('');
 
   // Fall detection parameters
-  const accelerationThreshold = 20; // m/s² - threshold for impact detection
-  const angularVelocityThreshold = 3; // rad/s - threshold for high rotation
+  const accelerationThreshold = 5; // m/s² - threshold for impact detection
+  const angularVelocityThreshold = 1; // rad/s - threshold for high rotation
   const lowActivityThreshold = 2; // m/s² - threshold for low activity
   const patternDuration = 2000; // ms - maximum time for fall pattern
   const lowActivityDuration = 500; // ms - minimum time of low activity after impact
@@ -426,7 +426,7 @@ export default function FallDetectionApp() {
         <div className="mt-6 text-sm text-gray-600">
           <h4 className="font-semibold mb-2">Fall Pattern Detection:</h4>
           <ul className="space-y-1">
-            <li>• Sudden 111111 acceleration spike (&gt;20 m/s²)</li>
+            <li>• Sudden 22222 acceleration spike (&gt;20 m/s²)</li>
             <li>• High angular velocity (&gt;3 rad/s)</li>
             <li>• Followed by low activity (&lt;2 m/s²)</li>
             <li>• All within 2 seconds</li>
