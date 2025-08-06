@@ -39,8 +39,8 @@ export default function FallDetectionApp() {
   const [error, setError] = useState<string>('');
 
   // Fall detection parameters
-  const accelerationThreshold = 16; // m/s² - threshold for impact detection
-  const angularVelocityThreshold = 1.4; // rad/s - threshold for high rotation
+  const accelerationThreshold = 7; // m/s² - threshold for impact detection
+  const angularVelocityThreshold = 2.3; // rad/s - threshold for high rotation
   const lowActivityThreshold = 2; // m/s² - threshold for low activity
   const patternDuration = 1500; // ms - maximum time for fall pattern
 
