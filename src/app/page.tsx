@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import type { Sensor, Accelerometer, Gyroscope } from '../types/sensors';
 
 interface SensorData {
   x: number;
@@ -28,7 +29,6 @@ export default function FallDetectionApp() {
 
   const [currentAcceleration, setCurrentAcceleration] = useState<SensorData | null>(null);
   const [currentRotation, setCurrentRotation] = useState<SensorData | null>(null);
-  const [permissionStatus, setPermissionStatus] = useState<string>('prompt');
   const [error, setError] = useState<string>('');
 
   const fallThreshold = 15; // m/s² - threshold for fall detection
@@ -51,7 +51,6 @@ export default function FallDetectionApp() {
     try {
       if ('permissions' in navigator) {
         const permission = await navigator.permissions.query({ name: 'accelerometer' as PermissionName });
-        setPermissionStatus(permission.state);
         
         if (permission.state === 'granted') {
           startDetection();
@@ -74,12 +73,15 @@ export default function FallDetectionApp() {
         return;
       }
 
-      const accelerometer = new (window as any).Accelerometer({
+      const AccelerometerClass = (window as Window & { Accelerometer: typeof Accelerometer }).Accelerometer;
+      const GyroscopeClass = (window as Window & { Gyroscope: typeof Gyroscope }).Gyroscope;
+
+      const accelerometer = new AccelerometerClass({
         frequency: 60,
         referenceFrame: 'device'
       });
 
-      const gyroscope = new (window as any).Gyroscope({
+      const gyroscope = new GyroscopeClass({
         frequency: 60,
         referenceFrame: 'device'
       });

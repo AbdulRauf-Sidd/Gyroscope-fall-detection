@@ -10,13 +10,6 @@ interface SensorOptions {
   referenceFrame?: 'device' | 'screen';
 }
 
-interface SensorReading {
-  x: number | null;
-  y: number | null;
-  z: number | null;
-  timestamp: number | null;
-}
-
 declare class Sensor extends EventTarget {
   constructor(options?: SensorOptions);
   start(): void;
@@ -39,4 +32,9 @@ declare class Gyroscope extends Sensor {
   timestamp: number | null;
 }
 
-export {}; 
+// Export the Sensor class for use in other files
+declare const Sensor: typeof Sensor;
+declare const Accelerometer: typeof Accelerometer;
+declare const Gyroscope: typeof Gyroscope;
+
+export { Sensor, Accelerometer, Gyroscope }; 
