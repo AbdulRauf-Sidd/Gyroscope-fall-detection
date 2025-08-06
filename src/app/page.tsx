@@ -18,6 +18,14 @@ interface FallDetectionState {
   fallCount: number;
 }
 
+interface FallPattern {
+  accelerationSpike: boolean;
+  highAngularVelocity: boolean;
+  lowActivityAfter: boolean;
+  patternStartTime: number | null;
+  impactDetected: boolean;
+}
+
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
     isDetecting: false,
@@ -31,9 +39,28 @@ export default function FallDetectionApp() {
   const [currentRotation, setCurrentRotation] = useState<SensorData | null>(null);
   const [error, setError] = useState<string>('');
 
-  const fallThreshold = 15; // m/s² - threshold for fall detection
-  const dataWindowSize = 50; // Number of data points to keep for analysis
+  // Fall detection parameters
+  const accelerationThreshold = 20; // m/s² - threshold for impact detection
+  const angularVelocityThreshold = 3; // rad/s - threshold for high rotation
+  const lowActivityThreshold = 2; // m/s² - threshold for low activity
+  const patternDuration = 2000; // ms - maximum time for fall pattern
+  const lowActivityDuration = 500; // ms - minimum time of low activity after impact
+
+  const dataWindowSize = 100; // Number of data points to keep for analysis
   const sensorRef = useRef<Sensor | null>(null);
+  
+  // Fall pattern tracking
+  const fallPatternRef = useRef<FallPattern>({
+    accelerationSpike: false,
+    highAngularVelocity: false,
+    lowActivityAfter: false,
+    patternStartTime: null,
+    impactDetected: false,
+  });
+
+  // Store recent sensor data for pattern analysis
+  const recentAccelData = useRef<SensorData[]>([]);
+  const recentGyroData = useRef<SensorData[]>([]);
 
   useEffect(() => {
     checkSensorSupport();
@@ -95,7 +122,7 @@ export default function FallDetectionApp() {
         };
 
         setCurrentAcceleration(accelData);
-        processSensorData(accelData);
+        processAccelerationData(accelData);
       });
 
       gyroscope.addEventListener('reading', () => {
@@ -107,6 +134,7 @@ export default function FallDetectionApp() {
         };
 
         setCurrentRotation(gyroData);
+        processGyroscopeData(gyroData);
       });
 
       accelerometer.start();
@@ -129,35 +157,116 @@ export default function FallDetectionApp() {
     setState(prev => ({ ...prev, isDetecting: false }));
   };
 
-  const processSensorData = (data: SensorData) => {
-    setState(prev => {
-      const newSensorData = [...prev.sensorData, data].slice(-dataWindowSize);
+  const processAccelerationData = (data: SensorData) => {
+    // Add to recent data
+    recentAccelData.current.push(data);
+    if (recentAccelData.current.length > dataWindowSize) {
+      recentAccelData.current.shift();
+    }
+
+    const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+    
+    // Check for acceleration spike (impact)
+    if (magnitude > accelerationThreshold) {
+      if (!fallPatternRef.current.impactDetected) {
+        fallPatternRef.current.impactDetected = true;
+        fallPatternRef.current.accelerationSpike = true;
+        fallPatternRef.current.patternStartTime = data.timestamp;
+        console.log('Impact detected:', magnitude.toFixed(2), 'm/s²');
+      }
+    }
+
+    // Check for low activity after impact
+    if (fallPatternRef.current.impactDetected && fallPatternRef.current.patternStartTime) {
+      const timeSinceImpact = data.timestamp - fallPatternRef.current.patternStartTime;
       
-      // Calculate magnitude of acceleration
-      const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
-      
-      // Check for sudden acceleration change (fall detection)
-      if (magnitude > fallThreshold) {
-        const now = Date.now();
-        const timeSinceLastFall = prev.lastFallTime ? now - prev.lastFallTime : Infinity;
+      if (timeSinceImpact > 200 && timeSinceImpact < patternDuration) {
+        // Check if we have low activity for the required duration
+        const recentData = recentAccelData.current.slice(-10); // Last 10 readings
+        const avgMagnitude = recentData.reduce((sum, d) => 
+          sum + Math.sqrt(d.x ** 2 + d.y ** 2 + d.z ** 2), 0) / recentData.length;
         
-        // Only count as new fall if more than 2 seconds have passed
-        if (timeSinceLastFall > 2000) {
-          return {
-            ...prev,
-            fallDetected: true,
-            lastFallTime: now,
-            fallCount: prev.fallCount + 1,
-            sensorData: newSensorData
-          };
+        if (avgMagnitude < lowActivityThreshold) {
+          fallPatternRef.current.lowActivityAfter = true;
         }
       }
+    }
+
+    // Check if pattern is complete
+    checkFallPattern();
+  };
+
+  const processGyroscopeData = (data: SensorData) => {
+    // Add to recent data
+    recentGyroData.current.push(data);
+    if (recentGyroData.current.length > dataWindowSize) {
+      recentGyroData.current.shift();
+    }
+
+    const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+    
+    // Check for high angular velocity (twist or tilt)
+    if (magnitude > angularVelocityThreshold) {
+      if (fallPatternRef.current.impactDetected && fallPatternRef.current.patternStartTime) {
+        const timeSinceImpact = data.timestamp - fallPatternRef.current.patternStartTime;
+        
+        // High angular velocity should occur within 1 second of impact
+        if (timeSinceImpact > 0 && timeSinceImpact < 1000) {
+          fallPatternRef.current.highAngularVelocity = true;
+          console.log('High angular velocity detected:', magnitude.toFixed(2), 'rad/s');
+        }
+      }
+    }
+
+    // Check if pattern is complete
+    checkFallPattern();
+  };
+
+  const checkFallPattern = () => {
+    const pattern = fallPatternRef.current;
+    
+    if (!pattern.impactDetected || !pattern.patternStartTime) return;
+
+    const now = Date.now();
+    const timeSinceStart = now - pattern.patternStartTime;
+
+    // Check if we have a complete fall pattern
+    if (pattern.accelerationSpike && 
+        pattern.highAngularVelocity && 
+        pattern.lowActivityAfter &&
+        timeSinceStart <= patternDuration) {
       
-      return {
-        ...prev,
-        sensorData: newSensorData
-      };
-    });
+      // Check if enough time has passed since last fall detection
+      const timeSinceLastFall = state.lastFallTime ? now - state.lastFallTime : Infinity;
+      
+      if (timeSinceLastFall > 3000) { // 3 second cooldown
+        console.log('Fall pattern detected!');
+        setState(prev => ({
+          ...prev,
+          fallDetected: true,
+          lastFallTime: now,
+          fallCount: prev.fallCount + 1,
+        }));
+      }
+      
+      // Reset pattern
+      resetFallPattern();
+    }
+    
+    // Reset pattern if too much time has passed
+    if (timeSinceStart > patternDuration) {
+      resetFallPattern();
+    }
+  };
+
+  const resetFallPattern = () => {
+    fallPatternRef.current = {
+      accelerationSpike: false,
+      highAngularVelocity: false,
+      lowActivityAfter: false,
+      patternStartTime: null,
+      impactDetected: false,
+    };
   };
 
   const resetFallDetection = () => {
@@ -167,6 +276,7 @@ export default function FallDetectionApp() {
       fallCount: 0,
       lastFallTime: null
     }));
+    resetFallPattern();
   };
 
   const getMagnitude = (data: SensorData | null) => {
@@ -180,12 +290,24 @@ export default function FallDetectionApp() {
     return 'bg-gray-500';
   };
 
+  const getPatternStatus = () => {
+    const pattern = fallPatternRef.current;
+    if (!pattern.impactDetected) return 'Waiting for impact...';
+    
+    const status = [];
+    if (pattern.accelerationSpike) status.push('✓ Impact');
+    if (pattern.highAngularVelocity) status.push('✓ Rotation');
+    if (pattern.lowActivityAfter) status.push('✓ Low Activity');
+    
+    return status.length > 0 ? status.join(' | ') : 'Impact detected...';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-6">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Fall Detection</h1>
-          <p className="text-gray-600">Monitor your device for fall detection</p>
+          <p className="text-gray-600">Advanced pattern-based fall detection</p>
         </div>
 
         {/* Status Indicator */}
@@ -204,9 +326,17 @@ export default function FallDetectionApp() {
                 <span className="text-2xl mr-2">⚠️</span>
                 <div>
                   <p className="font-semibold">Fall Detected!</p>
-                  <p className="text-sm">Sudden acceleration detected at {new Date(state.lastFallTime!).toLocaleTimeString()}</p>
+                  <p className="text-sm">Complete fall pattern detected at {new Date(state.lastFallTime!).toLocaleTimeString()}</p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Pattern Status */}
+          {state.isDetecting && !state.fallDetected && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
+              <p className="text-sm font-semibold">Pattern Status:</p>
+              <p className="text-xs">{getPatternStatus()}</p>
             </div>
           )}
         </div>
@@ -294,11 +424,12 @@ export default function FallDetectionApp() {
 
         {/* Instructions */}
         <div className="mt-6 text-sm text-gray-600">
-          <h4 className="font-semibold mb-2">How it works:</h4>
+          <h4 className="font-semibold mb-2">Fall Pattern Detection:</h4>
           <ul className="space-y-1">
-            <li>• Uses device accelerometer and gyroscope</li>
-            <li>• Detects sudden acceleration changes</li>
-            <li>• Threshold: {fallThreshold} m/s²</li>
+            <li>• Sudden acceleration spike (&gt;20 m/s²)</li>
+            <li>• High angular velocity (&gt;3 rad/s)</li>
+            <li>• Followed by low activity (&lt;2 m/s²)</li>
+            <li>• All within 2 seconds</li>
             <li>• Works best on mobile devices</li>
           </ul>
         </div>
