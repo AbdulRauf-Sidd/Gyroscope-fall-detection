@@ -42,7 +42,7 @@ export default function FallDetectionApp() {
   const accelerationThreshold = 16; // m/s² - threshold for impact detection
   const angularVelocityThreshold = 1.4; // rad/s - threshold for high rotation
   const lowActivityThreshold = 2; // m/s² - threshold for low activity
-  const patternDuration = 2000; // ms - maximum time for fall pattern
+  const patternDuration = 1500; // ms - maximum time for fall pattern
 
   const dataWindowSize = 100; // Number of data points to keep for analysis
   
