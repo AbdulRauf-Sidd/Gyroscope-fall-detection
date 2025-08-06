@@ -426,7 +426,7 @@ export default function FallDetectionApp() {
         <div className="mt-6 text-sm text-gray-600">
           <h4 className="font-semibold mb-2">Fall Pattern Detection:</h4>
           <ul className="space-y-1">
-            <li>• Sudden acceleration spike (&gt;20 m/s²)</li>
+            <li>• Sudden 111111 acceleration spike (&gt;20 m/s²)</li>
             <li>• High angular velocity (&gt;3 rad/s)</li>
             <li>• Followed by low activity (&lt;2 m/s²)</li>
             <li>• All within 2 seconds</li>
