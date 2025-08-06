@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Sensor, Accelerometer, Gyroscope } from '../types/sensors';
 
 interface SensorData {
   x: number;
@@ -44,10 +43,8 @@ export default function FallDetectionApp() {
   const angularVelocityThreshold = 1; // rad/s - threshold for high rotation
   const lowActivityThreshold = 2; // m/s² - threshold for low activity
   const patternDuration = 2000; // ms - maximum time for fall pattern
-  const lowActivityDuration = 500; // ms - minimum time of low activity after impact
 
   const dataWindowSize = 100; // Number of data points to keep for analysis
-  const sensorRef = useRef<Sensor | null>(null);
   
   // Fall pattern tracking
   const fallPatternRef = useRef<FallPattern>({
@@ -62,26 +59,31 @@ export default function FallDetectionApp() {
   const recentAccelData = useRef<SensorData[]>([]);
   const recentGyroData = useRef<SensorData[]>([]);
 
+  // Store cleanup function reference
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     checkSensorSupport();
   }, []);
 
   const checkSensorSupport = () => {
-    if ('Accelerometer' in window && 'Gyroscope' in window) {
+    if ('DeviceMotionEvent' in window && 'DeviceOrientationEvent' in window) {
       setError('');
     } else {
-      setError('Sensors not supported on this device. Please use a mobile device with accelerometer and gyroscope.');
+      setError('Motion and orientation sensors not supported on this device. Please use a mobile device.');
     }
   };
 
   const requestPermission = async () => {
     try {
-      if ('permissions' in navigator) {
-        const permission = await navigator.permissions.query({ name: 'accelerometer' as PermissionName });
-        
-        if (permission.state === 'granted') {
+      // Request permission for device motion (iOS requirement)
+      if ('DeviceMotionEvent' in window) {
+        // iOS requires user gesture to request permission
+        const permission = await (DeviceMotionEvent as { requestPermission?: () => Promise<'granted' | 'denied'> }).requestPermission?.();
+        if (permission === 'granted' || permission === 'denied') {
           startDetection();
-        } else if (permission.state === 'prompt') {
+        } else {
+          // For other browsers, just start detection
           startDetection();
         }
       } else {
@@ -89,71 +91,81 @@ export default function FallDetectionApp() {
       }
     } catch (err) {
       console.error('Permission request failed:', err);
-      setError('Failed to request sensor permissions');
+      setError('Failed to request motion permissions. Please ensure you\'re on a mobile device.');
     }
   };
 
   const startDetection = () => {
     try {
-      if (!('Accelerometer' in window)) {
-        setError('Accelerometer not available');
+      if (!('DeviceMotionEvent' in window)) {
+        setError('Device motion not available');
         return;
       }
 
-      const AccelerometerClass = (window as Window & { Accelerometer: typeof Accelerometer }).Accelerometer;
-      const GyroscopeClass = (window as Window & { Gyroscope: typeof Gyroscope }).Gyroscope;
+      // Set up device motion listener (accelerometer + gyroscope)
+      const handleDeviceMotion = (event: DeviceMotionEvent) => {
+        const timestamp = Date.now();
+        
+        // Process acceleration data
+        if (event.accelerationIncludingGravity) {
+          const accelData: SensorData = {
+            x: event.accelerationIncludingGravity.x || 0,
+            y: event.accelerationIncludingGravity.y || 0,
+            z: event.accelerationIncludingGravity.z || 0,
+            timestamp
+          };
+          
+          setCurrentAcceleration(accelData);
+          processAccelerationData(accelData);
+        }
 
-      const accelerometer = new AccelerometerClass({
-        frequency: 60,
-        referenceFrame: 'device'
-      });
+        // Process rotation rate data (gyroscope)
+        if (event.rotationRate) {
+          const gyroData: SensorData = {
+            x: event.rotationRate.alpha || 0,
+            y: event.rotationRate.beta || 0,
+            z: event.rotationRate.gamma || 0,
+            timestamp
+          };
+          
+          setCurrentRotation(gyroData);
+          processGyroscopeData(gyroData);
+        }
+      };
 
-      const gyroscope = new GyroscopeClass({
-        frequency: 60,
-        referenceFrame: 'device'
-      });
+      // Set up device orientation listener (for additional rotation data)
+      const handleDeviceOrientation = () => {
+        // This provides additional orientation data if needed
+        // We can use this for more sophisticated fall detection
+      };
 
-      accelerometer.addEventListener('reading', () => {
-        const accelData: SensorData = {
-          x: accelerometer.x || 0,
-          y: accelerometer.y || 0,
-          z: accelerometer.z || 0,
-          timestamp: Date.now()
-        };
+      // Add event listeners
+      window.addEventListener('devicemotion', handleDeviceMotion, { passive: true });
+      window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
 
-        setCurrentAcceleration(accelData);
-        processAccelerationData(accelData);
-      });
+      // Store cleanup function
+      const cleanup = () => {
+        window.removeEventListener('devicemotion', handleDeviceMotion);
+        window.removeEventListener('deviceorientation', handleDeviceOrientation);
+      };
 
-      gyroscope.addEventListener('reading', () => {
-        const gyroData: SensorData = {
-          x: gyroscope.x || 0,
-          y: gyroscope.y || 0,
-          z: gyroscope.z || 0,
-          timestamp: Date.now()
-        };
-
-        setCurrentRotation(gyroData);
-        processGyroscopeData(gyroData);
-      });
-
-      accelerometer.start();
-      gyroscope.start();
-      sensorRef.current = accelerometer;
+      cleanupRef.current = cleanup;
 
       setState(prev => ({ ...prev, isDetecting: true }));
       setError('');
     } catch (err) {
-      console.error('Failed to start sensors:', err);
-      setError('Failed to start sensor detection. Please ensure you\'re on a mobile device and grant necessary permissions.');
+      console.error('Failed to start motion detection:', err);
+      setError('Failed to start motion detection. Please ensure you\'re on a mobile device and grant necessary permissions.');
     }
   };
 
   const stopDetection = () => {
-    if (sensorRef.current) {
-      sensorRef.current.stop();
-      sensorRef.current = null;
+    // Remove event listeners using stored cleanup function
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
     }
+    
     setState(prev => ({ ...prev, isDetecting: false }));
   };
 
@@ -426,11 +438,11 @@ export default function FallDetectionApp() {
         <div className="mt-6 text-sm text-gray-600">
           <h4 className="font-semibold mb-2">Fall Pattern Detection:</h4>
           <ul className="space-y-1">
-            <li>• Sudden 22222 acceleration spike (&gt;20 m/s²)</li>
+            <li>• Sudden acceleration spike (&gt;20 m/s²)</li>
             <li>• High angular velocity (&gt;3 rad/s)</li>
             <li>• Followed by low activity (&lt;2 m/s²)</li>
             <li>• All within 2 seconds</li>
-            <li>• Works best on mobile devices</li>
+            <li>• Works on iOS and Android</li>
           </ul>
         </div>
       </div>

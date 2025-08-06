@@ -1,40 +1,52 @@
+// TypeScript declarations for device motion and orientation events
+// These are standard Web APIs with good cross-platform support
+
 declare global {
   interface Window {
-    Accelerometer: typeof Accelerometer;
-    Gyroscope: typeof Gyroscope;
+    DeviceMotionEvent: typeof DeviceMotionEvent;
+    DeviceOrientationEvent: typeof DeviceOrientationEvent;
   }
 }
 
-interface SensorOptions {
-  frequency?: number;
-  referenceFrame?: 'device' | 'screen';
+// DeviceMotionEvent provides acceleration and rotation rate data
+interface DeviceMotionEvent extends Event {
+  acceleration: DeviceMotionEventAcceleration | null;
+  accelerationIncludingGravity: DeviceMotionEventAcceleration | null;
+  rotationRate: DeviceMotionEventRotationRate | null;
+  interval: number | null;
 }
 
-declare class Sensor extends EventTarget {
-  constructor(options?: SensorOptions);
-  start(): void;
-  stop(): void;
-  addEventListener(type: string, listener: EventListener): void;
-  removeEventListener(type: string, listener: EventListener): void;
-}
-
-declare class Accelerometer extends Sensor {
+interface DeviceMotionEventAcceleration {
   x: number | null;
   y: number | null;
   z: number | null;
-  timestamp: number | null;
 }
 
-declare class Gyroscope extends Sensor {
-  x: number | null;
-  y: number | null;
-  z: number | null;
-  timestamp: number | null;
+interface DeviceMotionEventRotationRate {
+  alpha: number | null;
+  beta: number | null;
+  gamma: number | null;
 }
 
-// Export the Sensor class for use in other files
-declare const Sensor: typeof Sensor;
-declare const Accelerometer: typeof Accelerometer;
-declare const Gyroscope: typeof Gyroscope;
+// DeviceOrientationEvent provides orientation data
+interface DeviceOrientationEvent extends Event {
+  alpha: number | null;
+  beta: number | null;
+  gamma: number | null;
+  absolute: boolean;
+}
 
-export { Sensor, Accelerometer, Gyroscope }; 
+// iOS-specific permission request
+interface DeviceMotionEventConstructor {
+  requestPermission?: () => Promise<'granted' | 'denied'>;
+}
+
+declare const DeviceMotionEvent: DeviceMotionEventConstructor & {
+  new (type: string, eventInitDict?: EventInit): DeviceMotionEvent;
+};
+
+declare const DeviceOrientationEvent: {
+  new (type: string, eventInitDict?: EventInit): DeviceOrientationEvent;
+};
+
+export {}; 
