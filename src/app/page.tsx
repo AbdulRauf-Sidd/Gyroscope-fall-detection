@@ -1,103 +1,306 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect, useRef } from 'react';
+
+interface SensorData {
+  x: number;
+  y: number;
+  z: number;
+  timestamp: number;
+}
+
+interface FallDetectionState {
+  isDetecting: boolean;
+  fallDetected: boolean;
+  sensorData: SensorData[];
+  lastFallTime: number | null;
+  fallCount: number;
+}
+
+export default function FallDetectionApp() {
+  const [state, setState] = useState<FallDetectionState>({
+    isDetecting: false,
+    fallDetected: false,
+    sensorData: [],
+    lastFallTime: null,
+    fallCount: 0,
+  });
+
+  const [currentAcceleration, setCurrentAcceleration] = useState<SensorData | null>(null);
+  const [currentRotation, setCurrentRotation] = useState<SensorData | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<string>('prompt');
+  const [error, setError] = useState<string>('');
+
+  const fallThreshold = 15; // m/s² - threshold for fall detection
+  const dataWindowSize = 50; // Number of data points to keep for analysis
+  const sensorRef = useRef<Sensor | null>(null);
+
+  useEffect(() => {
+    checkSensorSupport();
+  }, []);
+
+  const checkSensorSupport = () => {
+    if ('Accelerometer' in window && 'Gyroscope' in window) {
+      setError('');
+    } else {
+      setError('Sensors not supported on this device. Please use a mobile device with accelerometer and gyroscope.');
+    }
+  };
+
+  const requestPermission = async () => {
+    try {
+      if ('permissions' in navigator) {
+        const permission = await navigator.permissions.query({ name: 'accelerometer' as PermissionName });
+        setPermissionStatus(permission.state);
+        
+        if (permission.state === 'granted') {
+          startDetection();
+        } else if (permission.state === 'prompt') {
+          startDetection();
+        }
+      } else {
+        startDetection();
+      }
+    } catch (err) {
+      console.error('Permission request failed:', err);
+      setError('Failed to request sensor permissions');
+    }
+  };
+
+  const startDetection = () => {
+    try {
+      if (!('Accelerometer' in window)) {
+        setError('Accelerometer not available');
+        return;
+      }
+
+      const accelerometer = new (window as any).Accelerometer({
+        frequency: 60,
+        referenceFrame: 'device'
+      });
+
+      const gyroscope = new (window as any).Gyroscope({
+        frequency: 60,
+        referenceFrame: 'device'
+      });
+
+      accelerometer.addEventListener('reading', () => {
+        const accelData: SensorData = {
+          x: accelerometer.x || 0,
+          y: accelerometer.y || 0,
+          z: accelerometer.z || 0,
+          timestamp: Date.now()
+        };
+
+        setCurrentAcceleration(accelData);
+        processSensorData(accelData);
+      });
+
+      gyroscope.addEventListener('reading', () => {
+        const gyroData: SensorData = {
+          x: gyroscope.x || 0,
+          y: gyroscope.y || 0,
+          z: gyroscope.z || 0,
+          timestamp: Date.now()
+        };
+
+        setCurrentRotation(gyroData);
+      });
+
+      accelerometer.start();
+      gyroscope.start();
+      sensorRef.current = accelerometer;
+
+      setState(prev => ({ ...prev, isDetecting: true }));
+      setError('');
+    } catch (err) {
+      console.error('Failed to start sensors:', err);
+      setError('Failed to start sensor detection. Please ensure you\'re on a mobile device and grant necessary permissions.');
+    }
+  };
+
+  const stopDetection = () => {
+    if (sensorRef.current) {
+      sensorRef.current.stop();
+      sensorRef.current = null;
+    }
+    setState(prev => ({ ...prev, isDetecting: false }));
+  };
+
+  const processSensorData = (data: SensorData) => {
+    setState(prev => {
+      const newSensorData = [...prev.sensorData, data].slice(-dataWindowSize);
+      
+      // Calculate magnitude of acceleration
+      const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+      
+      // Check for sudden acceleration change (fall detection)
+      if (magnitude > fallThreshold) {
+        const now = Date.now();
+        const timeSinceLastFall = prev.lastFallTime ? now - prev.lastFallTime : Infinity;
+        
+        // Only count as new fall if more than 2 seconds have passed
+        if (timeSinceLastFall > 2000) {
+          return {
+            ...prev,
+            fallDetected: true,
+            lastFallTime: now,
+            fallCount: prev.fallCount + 1,
+            sensorData: newSensorData
+          };
+        }
+      }
+      
+      return {
+        ...prev,
+        sensorData: newSensorData
+      };
+    });
+  };
+
+  const resetFallDetection = () => {
+    setState(prev => ({
+      ...prev,
+      fallDetected: false,
+      fallCount: 0,
+      lastFallTime: null
+    }));
+  };
+
+  const getMagnitude = (data: SensorData | null) => {
+    if (!data) return 0;
+    return Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+  };
+
+  const getStatusColor = () => {
+    if (state.fallDetected) return 'bg-red-500';
+    if (state.isDetecting) return 'bg-green-500';
+    return 'bg-gray-500';
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-6">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Fall Detection</h1>
+          <p className="text-gray-600">Monitor your device for fall detection</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Status Indicator */}
+        <div className="mb-6">
+          <div className="flex items-center justify-center mb-4">
+            <div className={`w-4 h-4 rounded-full ${getStatusColor()} mr-3`}></div>
+            <span className="text-lg font-semibold">
+              {state.fallDetected ? 'FALL DETECTED!' : 
+               state.isDetecting ? 'Monitoring...' : 'Not Active'}
+            </span>
+          </div>
+          
+          {state.fallDetected && (
+            <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded-lg mb-4">
+              <div className="flex items-center">
+                <span className="text-2xl mr-2">⚠️</span>
+                <div>
+                  <p className="font-semibold">Fall Detected!</p>
+                  <p className="text-sm">Sudden acceleration detected at {new Date(state.lastFallTime!).toLocaleTimeString()}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sensor Data Display */}
+        {currentAcceleration && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-semibold mb-3">Sensor Data</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Acceleration</p>
+                <p className="font-mono text-lg">
+                  X: {currentAcceleration.x.toFixed(2)} m/s²
+                </p>
+                <p className="font-mono text-lg">
+                  Y: {currentAcceleration.y.toFixed(2)} m/s²
+                </p>
+                <p className="font-mono text-lg">
+                  Z: {currentAcceleration.z.toFixed(2)} m/s²
+                </p>
+                <p className="font-mono text-lg font-bold">
+                  Magnitude: {getMagnitude(currentAcceleration).toFixed(2)} m/s²
+                </p>
+              </div>
+              {currentRotation && (
+                <div>
+                  <p className="text-sm text-gray-600">Rotation</p>
+                  <p className="font-mono text-lg">
+                    X: {currentRotation.x.toFixed(2)} rad/s
+                  </p>
+                  <p className="font-mono text-lg">
+                    Y: {currentRotation.y.toFixed(2)} rad/s
+                  </p>
+                  <p className="font-mono text-lg">
+                    Z: {currentRotation.z.toFixed(2)} rad/s
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Fall Counter */}
+        <div className="bg-blue-50 rounded-lg p-4 mb-6">
+          <div className="text-center">
+            <p className="text-sm text-gray-600">Falls Detected</p>
+            <p className="text-3xl font-bold text-blue-600">{state.fallCount}</p>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="space-y-3">
+          {!state.isDetecting ? (
+            <button
+              onClick={requestPermission}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Start Detection
+            </button>
+          ) : (
+            <button
+              onClick={stopDetection}
+              className="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+            >
+              Stop Detection
+            </button>
+          )}
+          
+          {state.fallDetected && (
+            <button
+              onClick={resetFallDetection}
+              className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+            >
+              Reset Fall Alert
+            </button>
+          )}
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mt-4 bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded-lg">
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Instructions */}
+        <div className="mt-6 text-sm text-gray-600">
+          <h4 className="font-semibold mb-2">How it works:</h4>
+          <ul className="space-y-1">
+            <li>• Uses device accelerometer and gyroscope</li>
+            <li>• Detects sudden acceleration changes</li>
+            <li>• Threshold: {fallThreshold} m/s²</li>
+            <li>• Works best on mobile devices</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

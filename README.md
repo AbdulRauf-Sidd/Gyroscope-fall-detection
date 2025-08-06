@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fall Detection App
+
+A Next.js application that detects when your phone is falling using device sensors (accelerometer and gyroscope).
+
+## Features
+
+- **Real-time Sensor Monitoring**: Uses device accelerometer and gyroscope sensors
+- **Fall Detection**: Detects sudden acceleration changes that indicate a fall
+- **Visual Feedback**: Clear status indicators and sensor data display
+- **Fall Counter**: Tracks the number of falls detected
+- **Mobile Optimized**: Designed specifically for mobile devices
+
+## How It Works
+
+The app uses the device's built-in sensors to monitor acceleration and rotation:
+
+1. **Accelerometer**: Measures acceleration in X, Y, and Z axes
+2. **Gyroscope**: Measures rotational velocity around each axis
+3. **Fall Detection Algorithm**: Calculates acceleration magnitude and triggers when it exceeds the threshold (15 m/s²)
+
+## Requirements
+
+- Mobile device with accelerometer and gyroscope sensors
+- Modern browser with sensor API support
+- HTTPS connection (required for sensor access)
 
 ## Getting Started
 
-First, run the development server:
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+2. **Run the development server**:
+   ```bash
+   npm run dev
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. **Open in mobile browser**:
+   - Navigate to `http://localhost:3000` on your mobile device
+   - Or use a tool like ngrok to expose your local server
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. **Grant permissions**:
+   - Allow sensor access when prompted
+   - The app will start monitoring automatically
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Usage
 
-## Learn More
+1. **Start Detection**: Click "Start Detection" to begin monitoring
+2. **Monitor Status**: Watch the status indicator and sensor data
+3. **Test Fall Detection**: Simulate a fall by dropping your phone (safely!)
+4. **Reset Alerts**: Click "Reset Fall Alert" to clear detected falls
 
-To learn more about Next.js, take a look at the following resources:
+## Technical Details
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Fall Threshold**: 15 m/s² acceleration magnitude
+- **Sensor Frequency**: 60Hz sampling rate
+- **Data Window**: Keeps last 50 sensor readings for analysis
+- **Debounce**: 2-second cooldown between fall detections
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Browser Compatibility
 
-## Deploy on Vercel
+- Chrome/Android: Full support
+- Safari/iOS: Limited support (may require user gesture)
+- Firefox: Limited support
+- Desktop browsers: Sensors not available
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The app is built with:
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+
+## Safety Note
+
+This app is for demonstration purposes. For actual fall detection in medical or safety applications, additional validation and testing would be required.
