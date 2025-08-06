@@ -40,8 +40,8 @@ export default function FallDetectionApp() {
   const [error, setError] = useState<string>('');
 
   // Fall detection parameters
-  const accelerationThreshold = 20; // m/s² - threshold for impact detection
-  const angularVelocityThreshold = 10; // rad/s - threshold for high rotation
+  const accelerationThreshold = 30; // m/s² - threshold for impact detection
+  const angularVelocityThreshold = 6; // rad/s - threshold for high rotation
   const lowActivityThreshold = 2; // m/s² - threshold for low activity
   const patternDuration = 1000; // ms - maximum time for fall pattern
   const lowActivityDuration = 500; // ms - minimum time of low activity after impact
@@ -198,15 +198,7 @@ export default function FallDetectionApp() {
 
   const processGyroscopeData = (data: SensorData) => {
     // Add to recent data
-    recentGyroData.current.push(data);Typical fall patterns:
-
-    Sudden spike in acceleration (impact)
-    
-    High angular velocity (twist or tilt)
-    
-    Followed by low activity (person is motionless)
-    
-    Short duration (all above happen within ~1-2 seconds)
+    recentGyroData.current.push(data);
     if (recentGyroData.current.length > dataWindowSize) {
       recentGyroData.current.shift();
     }
