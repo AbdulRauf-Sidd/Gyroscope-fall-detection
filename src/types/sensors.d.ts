@@ -36,6 +36,32 @@ interface DeviceOrientationEvent extends Event {
   absolute: boolean;
 }
 
+// types/sensors.ts
+
+export interface SensorData {
+  x: number;
+  y: number;
+  z: number;
+  timestamp: number;
+}
+
+export interface FallDetectionState {
+  isDetecting: boolean;
+  fallDetected: boolean;
+  sensorData: SensorData[];
+  lastFallTime: number | null;
+  fallCount: number;
+}
+
+export interface FallPattern {
+  accelerationSpike: boolean;
+  highAngularVelocity: boolean;
+  lowActivityAfter: boolean;
+  patternStartTime: number | null;
+  impactDetected: boolean;
+}
+
+
 // iOS-specific permission request
 interface DeviceMotionEventConstructor {
   requestPermission?: () => Promise<'granted' | 'denied'>;
