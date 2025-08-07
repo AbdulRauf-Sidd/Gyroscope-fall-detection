@@ -1,29 +1,31 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { SensorData, FallDetectionState, FallPattern } from '../types/sensors';
+import { processAccelerationData, processGyroscopeData } from '@/utils/fallDetection';
 
-interface SensorData {
-  x: number;
-  y: number;
-  z: number;
-  timestamp: number;
-}
+// interface SensorData {
+//   x: number;
+//   y: number;
+//   z: number;
+//   timestamp: number;
+// }
 
-interface FallDetectionState {
-  isDetecting: boolean;
-  fallDetected: boolean;
-  sensorData: SensorData[];
-  lastFallTime: number | null;
-  fallCount: number;
-}
+// interface FallDetectionState {
+//   isDetecting: boolean;
+//   fallDetected: boolean;
+//   sensorData: SensorData[];
+//   lastFallTime: number | null;
+//   fallCount: number;
+// }
 
-interface FallPattern {
-  accelerationSpike: boolean;
-  highAngularVelocity: boolean;
-  lowActivityAfter: boolean;
-  patternStartTime: number | null;
-  impactDetected: boolean;
-}
+// interface FallPattern {
+//   accelerationSpike: boolean;
+//   highAngularVelocity: boolean;
+//   lowActivityAfter: boolean;
+//   patternStartTime: number | null;
+//   impactDetected: boolean;
+// }
 
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
@@ -39,12 +41,12 @@ export default function FallDetectionApp() {
   const [error, setError] = useState<string>('');
 
   // Fall detection parameters
-  const accelerationThreshold = 7; // m/s² - threshold for impact detection
-  const angularVelocityThreshold = 4.3; // rad/s - threshold for high rotation
-  const lowActivityThreshold = 5; // m/s² - threshold for low activity
-  const patternDuration = 1500; // ms - maximum time for fall pattern
+  // const accelerationThreshold = 7; // m/s² - threshold for impact detection
+  // const angularVelocityThreshold = 4.3; // rad/s - threshold for high rotation
+  // const lowActivityThreshold = 5; // m/s² - threshold for low activity
+  // const patternDuration = 1500; // ms - maximum time for fall pattern
 
-  const dataWindowSize = 100; // Number of data points to keep for analysis
+  // const dataWindowSize = 100; // Number of data points to keep for analysis
   
   // Fall pattern tracking
   const fallPatternRef = useRef<FallPattern>({
@@ -116,7 +118,13 @@ export default function FallDetectionApp() {
           };
           
           setCurrentAcceleration(accelData);
-          processAccelerationData(accelData);
+          processAccelerationData(
+            accelData,
+            recentAccelData,          // ref for recent acceleration data
+            fallPatternRef,           // ref for fall pattern state
+            state,
+            setState
+          );
         }
 
         // Process rotation rate data (gyroscope)
@@ -129,7 +137,13 @@ export default function FallDetectionApp() {
           };
           
           setCurrentRotation(gyroData);
-          processGyroscopeData(gyroData);
+          processGyroscopeData(
+            gyroData,
+            recentAccelData,          // ref for recent acceleration data
+            fallPatternRef,           // ref for fall pattern state
+            state,
+            setState
+          );
         }
       };
 
@@ -159,137 +173,27 @@ export default function FallDetectionApp() {
     }
   };
 
-  const stopDetection = () => {
-    // Remove event listeners using stored cleanup function
-    if (cleanupRef.current) {
-      cleanupRef.current();
-      cleanupRef.current = null;
-    }
+  // const stopDetection = () => {
+  //   // Remove event listeners using stored cleanup function
+  //   if (cleanupRef.current) {
+  //     cleanupRef.current();
+  //     cleanupRef.current = null;
+  //   }
     
-    setState(prev => ({ ...prev, isDetecting: false }));
-  };
+  //   setState(prev => ({ ...prev, isDetecting: false }));
+  // };
 
-  const processAccelerationData = (data: SensorData) => {
-    // Add to recent data
-    recentAccelData.current.push(data);
-    if (recentAccelData.current.length > dataWindowSize) {
-      recentAccelData.current.shift();
-    }
+  
 
-    const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
-    
-    // Check for acceleration spike (impact)
-    if (magnitude > accelerationThreshold) {
-      if (!fallPatternRef.current.impactDetected) {
-        fallPatternRef.current.impactDetected = true;
-        fallPatternRef.current.accelerationSpike = true;
-        fallPatternRef.current.patternStartTime = data.timestamp;
-        console.log('Impact detected:', magnitude.toFixed(2), 'm/s²');
-      }
-    }
-
-    // Check for low activity after impact
-    if (fallPatternRef.current.impactDetected && fallPatternRef.current.patternStartTime) {
-      const timeSinceImpact = data.timestamp - fallPatternRef.current.patternStartTime;
-      
-      if (timeSinceImpact > 200 && timeSinceImpact < patternDuration) {
-        // Check if we have low activity for the required duration
-        const recentData = recentAccelData.current.slice(-10); // Last 10 readings
-        const avgMagnitude = recentData.reduce((sum, d) => 
-          sum + Math.sqrt(d.x ** 2 + d.y ** 2 + d.z ** 2), 0) / recentData.length;
-        
-        if (avgMagnitude < lowActivityThreshold) {
-          fallPatternRef.current.lowActivityAfter = true;
-        }
-      }
-    }
-
-    // Check if pattern is complete
-    checkFallPattern();
-  };
-
-  const processGyroscopeData = (data: SensorData) => {
-    // Add to recent data
-    recentGyroData.current.push(data);
-    if (recentGyroData.current.length > dataWindowSize) {
-      recentGyroData.current.shift();
-    }
-
-    const magnitude = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
-    
-    // Check for high angular velocity (twist or tilt)
-    if (magnitude > angularVelocityThreshold) {
-      if (fallPatternRef.current.impactDetected && fallPatternRef.current.patternStartTime) {
-        const timeSinceImpact = data.timestamp - fallPatternRef.current.patternStartTime;
-        
-        // High angular velocity should occur within 1 second of impact
-        if (timeSinceImpact > 0 && timeSinceImpact < 1000) {
-          fallPatternRef.current.highAngularVelocity = true;
-          console.log('High angular velocity detected:', magnitude.toFixed(2), 'rad/s');
-        }
-      }
-    }
-
-    // Check if pattern is complete
-    checkFallPattern();
-  };
-
-  const checkFallPattern = () => {
-    const pattern = fallPatternRef.current;
-    
-    if (!pattern.impactDetected || !pattern.patternStartTime) return;
-
-    const now = Date.now();
-    const timeSinceStart = now - pattern.patternStartTime;
-
-    // Check if we have a complete fall pattern
-    if (pattern.accelerationSpike && 
-        pattern.highAngularVelocity && 
-        pattern.lowActivityAfter &&
-        timeSinceStart <= patternDuration) {
-      
-      // Check if enough time has passed since last fall detection
-      const timeSinceLastFall = state.lastFallTime ? now - state.lastFallTime : Infinity;
-      
-      if (timeSinceLastFall > 3000) { // 3 second cooldown
-        console.log('Fall pattern detected!');
-        setState(prev => ({
-          ...prev,
-          fallDetected: true,
-          lastFallTime: now,
-          fallCount: prev.fallCount + 1,
-        }));
-      }
-      
-      // Reset pattern
-      resetFallPattern();
-    }
-    
-    // Reset pattern if too much time has passed
-    if (timeSinceStart > patternDuration) {
-      resetFallPattern();
-    }
-  };
-
-  const resetFallPattern = () => {
-    fallPatternRef.current = {
-      accelerationSpike: false,
-      highAngularVelocity: false,
-      lowActivityAfter: false,
-      patternStartTime: null,
-      impactDetected: false,
-    };
-  };
-
-  const resetFallDetection = () => {
-    setState(prev => ({
-      ...prev,
-      fallDetected: false,
-      fallCount: 0,
-      lastFallTime: null
-    }));
-    resetFallPattern();
-  };
+  // const resetFallDetection = () => {
+  //   setState(prev => ({
+  //     ...prev,
+  //     fallDetected: false,
+  //     fallCount: 0,
+  //     lastFallTime: null
+  //   }));
+  //   resetFallPattern();
+  // };
 
   const getMagnitude = (data: SensorData | null) => {
     if (!data) return 0;
@@ -400,7 +304,7 @@ export default function FallDetectionApp() {
         </div>
 
         {/* Controls */}
-        <div className="space-y-3">
+        {/* <div className="space-y-3">
           {!state.isDetecting ? (
             <button
               onClick={requestPermission}
@@ -425,7 +329,7 @@ export default function FallDetectionApp() {
               Reset Fall Alert
             </button>
           )}
-        </div>
+        </div> */}
 
         {/* Error Display */}
         {error && (
