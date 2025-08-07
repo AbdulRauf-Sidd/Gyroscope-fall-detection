@@ -66,6 +66,7 @@ export default function FallDetectionApp() {
 
   useEffect(() => {
     checkSensorSupport();
+    requestPermission();
   }, []);
 
   const checkSensorSupport = () => {
