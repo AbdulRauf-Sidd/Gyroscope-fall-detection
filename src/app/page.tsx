@@ -29,7 +29,7 @@ import { processAccelerationData, processGyroscopeData } from '@/utils/fallDetec
 
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
-    isDetecting: false,
+    isDetecting: true,
     fallDetected: false,
     sensorData: [],
     lastFallTime: null,
