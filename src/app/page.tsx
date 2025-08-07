@@ -1,31 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { SensorData, FallDetectionState, FallPattern } from '../types/sensors';
 import { processAccelerationData, processGyroscopeData } from '@/utils/fallDetection';
-
-// interface SensorData {
-//   x: number;
-//   y: number;
-//   z: number;
-//   timestamp: number;
-// }
-
-// interface FallDetectionState {
-//   isDetecting: boolean;
-//   fallDetected: boolean;
-//   sensorData: SensorData[];
-//   lastFallTime: number | null;
-//   fallCount: number;
-// }
-
-// interface FallPattern {
-//   accelerationSpike: boolean;
-//   highAngularVelocity: boolean;
-//   lowActivityAfter: boolean;
-//   patternStartTime: number | null;
-//   impactDetected: boolean;
-// }
 
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
@@ -40,15 +17,7 @@ export default function FallDetectionApp() {
   const [currentRotation, setCurrentRotation] = useState<SensorData | null>(null);
   const [error, setError] = useState<string>('');
 
-  // Fall detection parameters
-  // const accelerationThreshold = 7; // m/s² - threshold for impact detection
-  // const angularVelocityThreshold = 4.3; // rad/s - threshold for high rotation
-  // const lowActivityThreshold = 5; // m/s² - threshold for low activity
-  // const patternDuration = 1500; // ms - maximum time for fall pattern
-
-  // const dataWindowSize = 100; // Number of data points to keep for analysis
-  
-  // Fall pattern tracking
+  // Refs for data management
   const fallPatternRef = useRef<FallPattern>({
     accelerationSpike: false,
     highAngularVelocity: false,
@@ -56,37 +25,26 @@ export default function FallDetectionApp() {
     patternStartTime: null,
     impactDetected: false,
   });
-
-  // Store recent sensor data for pattern analysis
   const recentAccelData = useRef<SensorData[]>([]);
   const recentGyroData = useRef<SensorData[]>([]);
-
-  // Store cleanup function reference
   const cleanupRef = useRef<(() => void) | null>(null);
 
+  // Check sensor support on mount
   useEffect(() => {
-    checkSensorSupport();
-    requestPermission();
-  }, []);
-
-  const checkSensorSupport = () => {
-    if ('DeviceMotionEvent' in window && 'DeviceOrientationEvent' in window) {
-      setError('');
-    } else {
+    const hasSensors = 'DeviceMotionEvent' in window && 'DeviceOrientationEvent' in window;
+    if (!hasSensors) {
       setError('Motion and orientation sensors not supported on this device. Please use a mobile device.');
     }
-  };
+  }, []);
 
-  const requestPermission = async () => {
+  // Request permission and start detection
+  const requestPermission = useCallback(async (): Promise<void> => {
     try {
-      // Request permission for device motion (iOS requirement)
       if ('DeviceMotionEvent' in window) {
-        // iOS requires user gesture to request permission
         const permission = await (DeviceMotionEvent as { requestPermission?: () => Promise<'granted' | 'denied'> }).requestPermission?.();
         if (permission === 'granted' || permission === 'denied') {
           startDetection();
         } else {
-          // For other browsers, just start detection
           startDetection();
         }
       } else {
@@ -96,17 +54,16 @@ export default function FallDetectionApp() {
       console.error('Permission request failed:', err);
       setError('Failed to request motion permissions. Please ensure you\'re on a mobile device.');
     }
-  };
+  }, []);
 
-  const startDetection = () => {
+  const startDetection = useCallback((): void => {
     try {
       if (!('DeviceMotionEvent' in window)) {
         setError('Device motion not available');
         return;
       }
 
-      // Set up device motion listener (accelerometer + gyroscope)
-      const handleDeviceMotion = (event: DeviceMotionEvent) => {
+      const handleDeviceMotion = (event: DeviceMotionEvent): void => {
         const timestamp = Date.now();
         
         // Process acceleration data
@@ -121,14 +78,14 @@ export default function FallDetectionApp() {
           setCurrentAcceleration(accelData);
           processAccelerationData(
             accelData,
-            recentAccelData,          // ref for recent acceleration data
-            fallPatternRef,           // ref for fall pattern state
+            recentAccelData,
+            fallPatternRef,
             state,
             setState
           );
         }
 
-        // Process rotation rate data (gyroscope)
+        // Process rotation rate data
         if (event.rotationRate) {
           const gyroData: SensorData = {
             x: event.rotationRate.alpha || 0,
@@ -140,74 +97,93 @@ export default function FallDetectionApp() {
           setCurrentRotation(gyroData);
           processGyroscopeData(
             gyroData,
-            recentAccelData,          // ref for recent acceleration data
-            fallPatternRef,           // ref for fall pattern state
+            recentGyroData,
+            fallPatternRef,
             state,
             setState
           );
         }
       };
 
-      // Set up device orientation listener (for additional rotation data)
-      const handleDeviceOrientation = () => {
-        // This provides additional orientation data if needed
-        // We can use this for more sophisticated fall detection
+      const handleDeviceOrientation = (): void => {
+        // Additional orientation data processing if needed
       };
 
-      // Add event listeners
+      // Add event listeners with passive option for better performance
       window.addEventListener('devicemotion', handleDeviceMotion, { passive: true });
       window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
 
-      // Store cleanup function
-      const cleanup = () => {
+      const cleanup = (): void => {
         window.removeEventListener('devicemotion', handleDeviceMotion);
         window.removeEventListener('deviceorientation', handleDeviceOrientation);
       };
 
       cleanupRef.current = cleanup;
-
       setState(prev => ({ ...prev, isDetecting: true }));
       setError('');
     } catch (err) {
       console.error('Failed to start motion detection:', err);
       setError('Failed to start motion detection. Please ensure you\'re on a mobile device and grant necessary permissions.');
     }
-  };
+  }, [state]);
 
-  // const stopDetection = () => {
-  //   // Remove event listeners using stored cleanup function
-  //   if (cleanupRef.current) {
-  //     cleanupRef.current();
-  //     cleanupRef.current = null;
-  //   }
-    
-  //   setState(prev => ({ ...prev, isDetecting: false }));
-  // };
+  const stopDetection = useCallback((): void => {
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    setState(prev => ({ ...prev, isDetecting: false }));
+  }, []);
 
-  
+  const resetFallDetection = useCallback((): void => {
+    setState(prev => ({
+      ...prev,
+      fallDetected: false,
+      fallCount: 0,
+      lastFallTime: null
+    }));
+    fallPatternRef.current = {
+      accelerationSpike: false,
+      highAngularVelocity: false,
+      lowActivityAfter: false,
+      patternStartTime: null,
+      impactDetected: false,
+    };
+  }, []);
 
-  // const resetFallDetection = () => {
-  //   setState(prev => ({
-  //     ...prev,
-  //     fallDetected: false,
-  //     fallCount: 0,
-  //     lastFallTime: null
-  //   }));
-  //   resetFallPattern();
-  // };
+  // Auto-start detection on mount
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
 
-  const getMagnitude = (data: SensorData | null) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, []);
+
+  // Memoized utility functions
+  const getMagnitude = useCallback((data: SensorData | null): number => {
     if (!data) return 0;
     return Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
-  };
+  }, []);
 
-  const getStatusColor = () => {
+  const getStatusColor = useMemo(() => {
     if (state.fallDetected) return 'bg-red-500';
     if (state.isDetecting) return 'bg-green-500';
     return 'bg-gray-500';
-  };
+  }, [state.fallDetected, state.isDetecting]);
 
-  const getPatternStatus = () => {
+  const getStatusText = useMemo(() => {
+    if (state.fallDetected) return 'FALL DETECTED!';
+    if (state.isDetecting) return 'Monitoring...';
+    return 'Not Active';
+  }, [state.fallDetected, state.isDetecting]);
+
+  const getPatternStatus = useCallback((): string => {
     const pattern = fallPatternRef.current;
     if (!pattern.impactDetected) return 'Waiting for impact...';
     
@@ -217,7 +193,7 @@ export default function FallDetectionApp() {
     if (pattern.lowActivityAfter) status.push('✓ Low Activity');
     
     return status.length > 0 ? status.join(' | ') : 'Impact detected...';
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -230,11 +206,8 @@ export default function FallDetectionApp() {
         {/* Status Indicator */}
         <div className="mb-6">
           <div className="flex items-center justify-center mb-4">
-            <div className={`w-4 h-4 rounded-full ${getStatusColor()} mr-3`}></div>
-            <span className="text-lg font-semibold">
-              {state.fallDetected ? 'FALL DETECTED!' : 
-               state.isDetecting ? 'Monitoring...' : 'Not Active'}
-            </span>
+            <div className={`w-4 h-4 rounded-full ${getStatusColor} mr-3`}></div>
+            <span className="text-lg font-semibold">{getStatusText}</span>
           </div>
           
           {state.fallDetected && (
@@ -243,7 +216,9 @@ export default function FallDetectionApp() {
                 <span className="text-2xl mr-2">⚠️</span>
                 <div>
                   <p className="font-semibold">Fall Detected!</p>
-                  <p className="text-sm">Complete fall pattern detected at {new Date(state.lastFallTime!).toLocaleTimeString()}</p>
+                  <p className="text-sm">
+                    Complete fall pattern detected at {new Date(state.lastFallTime!).toLocaleTimeString()}
+                  </p>
                 </div>
               </div>
             </div>
@@ -305,10 +280,10 @@ export default function FallDetectionApp() {
         </div>
 
         {/* Controls */}
-        {/* <div className="space-y-3">
+        <div className="space-y-3">
           {!state.isDetecting ? (
             <button
-              onClick={requestPermission}
+              onClick={startDetection}
               className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               Start Detection
@@ -330,7 +305,7 @@ export default function FallDetectionApp() {
               Reset Fall Alert
             </button>
           )}
-        </div> */}
+        </div>
 
         {/* Error Display */}
         {error && (
@@ -343,10 +318,10 @@ export default function FallDetectionApp() {
         <div className="mt-6 text-sm text-gray-600">
           <h4 className="font-semibold mb-2">Fall Pattern Detection:</h4>
           <ul className="space-y-1">
-            <li>• Sudden acceleration spike (&gt;5 m/s²)</li>
-            <li>• High angular velocity (&gt;1 rad/s)</li>
-            <li>• Followed by low activity (&lt;2 m/s²)</li>
-            <li>• All within 2 seconds</li>
+            <li>• Sudden acceleration spike (&gt;7 m/s²)</li>
+            <li>• High angular velocity (&gt;4.3 rad/s)</li>
+            <li>• Followed by low activity (&lt;5 m/s²)</li>
+            <li>• All within 1.5 seconds</li>
             <li>• Works on iOS and Android</li>
           </ul>
         </div>
