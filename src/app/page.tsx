@@ -6,7 +6,7 @@ import { processAccelerationData, processGyroscopeData } from '@/utils/fallDetec
 
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
-    isDetecting: false,
+    isDetecting: true,
     fallDetected: false,
     sensorData: [],
     lastFallTime: null,
@@ -38,13 +38,16 @@ export default function FallDetectionApp() {
   }, []);
 
   // Request permission and start detection
-  const requestPermission = useCallback(async (): Promise<void> => {
+  const requestPermission = async () => {
     try {
+      // Request permission for device motion (iOS requirement)
       if ('DeviceMotionEvent' in window) {
+        // iOS requires user gesture to request permission
         const permission = await (DeviceMotionEvent as { requestPermission?: () => Promise<'granted' | 'denied'> }).requestPermission?.();
         if (permission === 'granted' || permission === 'denied') {
           startDetection();
         } else {
+          // For other browsers, just start detection
           startDetection();
         }
       } else {
@@ -54,7 +57,7 @@ export default function FallDetectionApp() {
       console.error('Permission request failed:', err);
       setError('Failed to request motion permissions. Please ensure you\'re on a mobile device.');
     }
-  }, []);
+  };
 
   const startDetection = useCallback((): void => {
     try {
@@ -153,7 +156,6 @@ export default function FallDetectionApp() {
 
   useEffect(() => {
     checkSensorSupport();
-    requestPermission();
   }, []);
 
   const checkSensorSupport = () => {
@@ -296,7 +298,7 @@ export default function FallDetectionApp() {
         <div className="space-y-3">
           {!state.isDetecting ? (
             <button
-              onClick={startDetection}
+              onClick={requestPermission}
               className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               Start Detection
