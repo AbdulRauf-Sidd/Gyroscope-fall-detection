@@ -6,7 +6,7 @@ import { processAccelerationData, processGyroscopeData } from '@/utils/fallDetec
 
 export default function FallDetectionApp() {
   const [state, setState] = useState<FallDetectionState>({
-    isDetecting: true,
+    isDetecting: false,
     fallDetected: false,
     sensorData: [],
     lastFallTime: null,
@@ -151,10 +151,23 @@ export default function FallDetectionApp() {
     };
   }, []);
 
-  // Auto-start detection on mount
   useEffect(() => {
+    checkSensorSupport();
     requestPermission();
   }, []);
+
+  const checkSensorSupport = () => {
+    if ('DeviceMotionEvent' in window && 'DeviceOrientationEvent' in window) {
+      setError('');
+    } else {
+      setError('Motion and orientation sensors not supported on this device. Please use a mobile device.');
+    }
+  };
+
+  // Auto-start detection on mount
+  // useEffect(() => {
+  //   requestPermission();
+  // }, []);
 
   // Cleanup on unmount
   useEffect(() => {
