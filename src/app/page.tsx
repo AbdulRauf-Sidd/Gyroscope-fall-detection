@@ -154,7 +154,7 @@ export default function FallDetectionApp() {
   // Auto-start detection on mount
   useEffect(() => {
     requestPermission();
-  }, [requestPermission]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
